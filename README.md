@@ -105,6 +105,7 @@ Run them with **⌘U**. They cover:
 - **Decoding:** all 5 jobs, snake_case keys, local date parsing, every status, the null name, the missing notes key, empty notes, the empty address, an unknown status, and a malformed date (should throw).
 - **Store:** sorting, the load-failure state, mark completed (status, count, filter), undo (restores the original status and clears the saved completion; not allowed for jobs completed in the JSON), persistence across a simulated restart, an unknown ID, the pending filter, search, and the overdue rule.
 
-## AI tools used
+## tools used
 
 - Claude Code: <!-- add share link / exported session file, e.g. claude-session.md -->
+- And ME :)
