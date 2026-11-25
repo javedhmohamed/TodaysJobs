@@ -84,6 +84,31 @@ final class JobStoreTests: XCTestCase {
         XCTAssertTrue(persistence.ids.isEmpty)
     }
 
+    // MARK: Undo
+
+    func testReopenRestoresOriginalStatusAndPersistence() {
+        let (store, persistence) = makeStore()
+        store.markCompleted("J-102") // was in_progress
+        XCTAssertTrue(store.canReopen("J-102"))
+
+        store.reopen("J-102")
+
+        XCTAssertEqual(store.job(id: "J-102")?.status, .inProgress)
+        XCTAssertTrue(persistence.ids.isEmpty)
+    }
+
+    func testCannotReopenJobCompletedInJSON() {
+        let (store, _) = makeStore()
+        XCTAssertFalse(store.canReopen("J-104"))
+        store.reopen("J-104")
+        XCTAssertEqual(store.job(id: "J-104")?.status, .completed)
+    }
+
+    func testCannotReopenJobThatIsNotCompleted() {
+        let (store, _) = makeStore()
+        XCTAssertFalse(store.canReopen("J-101"))
+    }
+
     // MARK: Filter and search
 
     func testPendingFilterShowsOnlyPendingJobs() {

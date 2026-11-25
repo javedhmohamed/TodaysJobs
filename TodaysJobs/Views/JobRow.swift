@@ -6,24 +6,41 @@ struct JobRow: View {
     let job: Job
     let now: Date
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     private var status: JobDisplayStatus { job.displayStatus(at: now) }
+    private var isLargeType: Bool { typeSize.isAccessibilitySize }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                name
-                address
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Group {
+            if isLargeType {
+                // At accessibility sizes two columns would crush the name, so stack.
+                VStack(alignment: .leading, spacing: 6) {
+                    name
+                    address
+                    HStack(spacing: 8) {
+                        time
+                        StatusPill(status: status)
+                    }
+                }
+            } else {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        name
+                        address
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            VStack(alignment: .trailing, spacing: 4) {
-                time
-                StatusPill(status: status)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        time
+                        StatusPill(status: status)
+                    }
+                }
             }
         }
         .frame(minHeight: 48) // + 12 pt top/bottom insets = 72 pt row
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Opens job details")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
     }
 
     // 17 pt semibold, primary. Missing → "Unknown customer", secondary, regular.
@@ -32,23 +49,22 @@ struct JobRow: View {
             Text(name)
                 .font(.headline)
                 .foregroundStyle(.primary)
-                .lineLimit(1)
+                .lineLimit(isLargeType ? 3 : 1)
         } else {
             Text("Unknown customer")
                 .font(.body)
                 .foregroundStyle(.secondary)
-                .lineLimit(1)
+                .lineLimit(isLargeType ? 3 : 1)
         }
     }
 
     // 15 pt regular, secondary, one line, truncated at the end.
-    @ViewBuilder private var address: some View {
-        HStack(spacing: 4) {
+    private var address: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
             Image(systemName: job.displayAddress == nil ? "mappin.slash" : "mappin.and.ellipse")
                 .font(.caption)
-                .accessibilityHidden(true)
             Text(job.displayAddress ?? "No address yet")
-                .lineLimit(1)
+                .lineLimit(isLargeType ? 4 : 1)
                 .truncationMode(.tail)
         }
         .font(.subheadline)
@@ -61,7 +77,6 @@ struct JobRow: View {
             .font(.subheadline.weight(status == .overdue ? .semibold : .medium))
             .monospacedDigit()
             .foregroundStyle(timeColor)
-            .accessibilityLabel("Scheduled at \(job.timeText)")
     }
 
     private var timeColor: Color {
@@ -70,6 +85,16 @@ struct JobRow: View {
         case .completed: .secondary
         default: .primary
         }
+    }
+
+    /// Status is read early so a VoiceOver user hears "Overdue" before the address.
+    private var accessibilityText: String {
+        [
+            job.displayName ?? "Unknown customer",
+            status.label,
+            job.timeText,
+            job.displayAddress ?? "No address yet",
+        ].joined(separator: ", ")
     }
 }
 

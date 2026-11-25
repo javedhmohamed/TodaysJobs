@@ -29,6 +29,9 @@ final class JobStore {
     private(set) var jobs: [Job] = []
     private(set) var loadState: LoadState = .loading
 
+    /// Status as it came from the JSON, so Undo can restore it.
+    private var originalStatuses: [Job.ID: JobStatus] = [:]
+
     private let loader: @MainActor () throws -> [Job]
     private let completionStore: CompletionPersisting
 
@@ -45,7 +48,12 @@ final class JobStore {
     func load() {
         do {
             let completed = completionStore.loadCompletedIDs()
-            jobs = try loader()
+            let decoded = try loader()
+            originalStatuses = Dictionary(
+                decoded.map { ($0.id, $0.status) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            jobs = decoded
                 .map { job in
                     var job = job
                     if completed.contains(job.id) { job.status = .completed }
@@ -91,6 +99,26 @@ final class JobStore {
 
         var completed = completionStore.loadCompletedIDs()
         completed.insert(id)
+        completionStore.saveCompletedIDs(completed)
+    }
+
+    /// Whether a completion can be undone: only jobs the technician completed
+    /// in this app, not ones that arrived as completed in the JSON.
+    func canReopen(_ id: Job.ID) -> Bool {
+        guard let job = job(id: id), job.status == .completed,
+              let original = originalStatuses[id] else { return false }
+        return original != .completed
+    }
+
+    /// Undo for `markCompleted`: restores the status from the JSON.
+    func reopen(_ id: Job.ID) {
+        guard canReopen(id),
+              let index = jobs.firstIndex(where: { $0.id == id }),
+              let original = originalStatuses[id] else { return }
+        jobs[index].status = original
+
+        var completed = completionStore.loadCompletedIDs()
+        completed.remove(id)
         completionStore.saveCompletedIDs(completed)
     }
 

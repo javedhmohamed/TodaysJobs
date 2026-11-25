@@ -15,7 +15,7 @@ struct JobListView: View {
             .navigationDestination(for: Job.ID.self) { id in
                 JobDetailView(jobID: id)
             }
-            .searchable(text: $searchText, prompt: "Customer or address")
+            .searchable(text: $searchText, prompt: "Search name or address")
         }
         .task {
             if store.loadState == .loading { store.load() }
@@ -29,11 +29,13 @@ struct JobListView: View {
             ProgressView("Loading jobs…")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        case .failed(let message):
+        case .failed:
+            // The technical reason stays in `loadState` for debugging; the
+            // technician gets what happened and what to do next.
             ContentUnavailableView {
-                Label("Couldn't Load Jobs", systemImage: "exclamationmark.triangle")
+                Label("Couldn't Load Your Jobs", systemImage: "exclamationmark.triangle")
             } description: {
-                Text(message)
+                Text("Something went wrong reading today's job list. Try again, and contact the office if it keeps happening.")
             } actions: {
                 Button("Try Again") { store.load() }
                     .buttonStyle(.borderedProminent)
@@ -48,42 +50,47 @@ struct JobListView: View {
         let rows = store.jobs(filter: filter, search: searchText)
 
         return List {
+            // Subtitle + filter, aligned with the card edges like the design.
             Section {
-                ForEach(rows) { job in
-                    NavigationLink(value: job.id) {
-                        JobRow(job: job, now: now)
-                    }
-                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
-                    .alignmentGuide(.listRowSeparatorLeading) { _ in 0 } // hairline inset 16 pt
-                }
-            } header: {
                 header
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                    .listRowBackground(Color.clear)
+            }
+
+            Section {
+                if rows.isEmpty {
+                    emptyState
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                } else {
+                    ForEach(rows) { job in
+                        NavigationLink(value: job.id) {
+                            JobRow(job: job, now: now)
+                        }
+                        .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 } // hairline inset 16 pt
+                    }
+                }
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
         .animation(.default, value: rows.map(\.id))
-        .overlay {
-            if rows.isEmpty { emptyState }
-        }
     }
 
-    /// Subtitle and the All / Pending control, under the large title.
     private var header: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(subtitle)
                 .font(.body)
                 .foregroundStyle(.secondary)
 
-            Picker("Show", selection: $filter) {
+            Picker("Filter jobs", selection: $filter) {
                 ForEach(JobFilter.allCases) { filter in
                     Text(filter.title).tag(filter)
                 }
             }
             .pickerStyle(.segmented)
         }
-        .textCase(nil)
-        .padding(.bottom, 8)
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
     }
 
     /// "Wednesday, 25 November · 3 pending"
@@ -99,9 +106,9 @@ struct JobListView: View {
             ContentUnavailableView.search(text: searchText)
         } else if filter == .pending && !store.jobs.isEmpty {
             ContentUnavailableView {
-                Label("All Caught Up", systemImage: "checkmark.circle")
+                Label("No Pending Jobs", systemImage: "checkmark.circle")
             } description: {
-                Text("No pending jobs left for today.")
+                Text("Every job today is in progress or completed.")
             } actions: {
                 Button("Show All Jobs") { filter = .all }
             }

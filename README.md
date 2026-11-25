@@ -66,30 +66,36 @@ TodaysJobsTests/               XCTest unit tests and the JSON fixture
 
 **Detail screen**
 
-The detail screen is designed for a technician standing at the customer's door:
-- Status and name at the top.
-- The time, with a "past scheduled time" warning if the job is late.
-- The address, with **Get Directions** (Apple Maps), or "No address yet" if there isn't one.
-- The notes, or "No notes for this job."
-- A large **Mark as Completed** button at the bottom, within thumb reach. It asks for confirmation because this version can't undo a completion, and plays a success haptic.
+The detail screen is designed for a technician standing at the customer's door. Its reading order follows the visit: who, then when, then what to do, then where.
+- The name comes first, with the status pill under it.
+- **When:** "Today, 09:30", with "45 min late" if the job is overdue. It doesn't repeat the weekday on a screen that's already about today.
+- **Notes** come before the address, because they hold instructions such as "call before arrival". If there are none, it says "No notes".
+- **Address:** a **Get Directions** button (Apple Maps), and a long-press to copy the address. If there's no address: "No address yet", plus a footer explaining that directions will appear once an address is added.
+- **Mark as Completed** is one tap at the bottom, within thumb reach, with a success haptic. There's no confirmation dialog, because this is the action a technician repeats most. **Undo** covers mistakes and restores the original status from the JSON. Jobs that arrive already completed can't be reopened.
+
+**UX copy**
+- Error messages say what happened and what to do next, with no file names or other technical detail. The technical reason is kept in `loadState` for debugging.
+- Empty states describe the actual situation, for example "Every job today is in progress or completed", and offer a way out with **Show All Jobs**.
+- Terms are the same everywhere: "No address yet" appears on both the row and the detail screen.
 
 **Accessibility**
-- Text styles (`.headline`, `.subheadline`, `.caption`) match the design's 17/15/12 pt sizes and also scale with Dynamic Type.
-- Pill colours are darker or lighter than the system colours so the text passes 4.5:1 contrast, in both light and dark mode.
-- Status is always written out as text, never shown by colour alone.
-- Each row reads as one VoiceOver element.
+- Text styles match the design's 17/15/12 pt sizes and also scale with Dynamic Type. At accessibility text sizes the row switches from two columns to a vertical stack, and lines wrap instead of collapsing the name to "R…".
+- VoiceOver reads each row as one element, with the status second: "Ravi Kumar, Overdue, 09:30, 12 2nd Avenue…".
+- Pill colours are darker or lighter than the system colours so the text passes 4.5:1 contrast, in both light and dark mode. Status is always written out as text, never shown by colour alone.
+- Known gap: the system `secondaryLabel` colour, which the design requires, is about 3.4:1 on white. The iOS Increase Contrast setting raises it.
+- All tap targets are at least 44 pt.
 
 ## Assumptions
 
 - All sample jobs are on 25 Nov 2026. The subtitle shows the date of the jobs, not today's date. On any later day, every pending job shows as Overdue, which is the correct result of the rule.
 - Times are shown in 24-hour `HH:mm` format to match the design.
-- A completed job can't be reopened. Nothing in the requirements asked for undo.
+- Undo is session-scoped to the JSON's original status; completing is saved immediately.
 
 ## Tests
 
 Run them with **⌘U**. They cover:
 - **Decoding:** all 5 jobs, snake_case keys, local date parsing, every status, the null name, the missing notes key, empty notes, the empty address, an unknown status, and a malformed date (should throw).
-- **Store:** sorting, the load-failure state, mark completed (status, count, filter), persistence across a simulated restart, an unknown ID, the pending filter, search, and the overdue rule.
+- **Store:** sorting, the load-failure state, mark completed (status, count, filter), undo (restores the original status and clears the saved completion; not allowed for jobs completed in the JSON), persistence across a simulated restart, an unknown ID, the pending filter, search, and the overdue rule.
 
 ## AI tools used
 

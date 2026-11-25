@@ -1,12 +1,12 @@
 import SwiftUI
+import UIKit
 
-/// Built for a technician at the customer's door: who and what first, then
-/// when, where (with directions) and the notes, with the main action in
-/// thumb reach at the bottom.
+/// Built for a technician at the customer's door. Reading order follows the
+/// visit: who → when → what to do (notes) → where. The one action that
+/// matters, Mark as Completed, sits at the bottom within thumb reach.
 struct JobDetailView: View {
     @Environment(JobStore.self) private var store
     @Environment(\.openURL) private var openURL
-    @State private var isConfirmingCompletion = false
 
     let jobID: Job.ID
 
@@ -15,7 +15,7 @@ struct JobDetailView: View {
             TimelineView(.everyMinute) { context in
                 detail(for: job, now: context.date)
             }
-            .navigationTitle(job.id)
+            .navigationTitle("Job \(job.id)")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) { completionBar(for: job) }
             .sensoryFeedback(.success, trigger: job.status) { _, new in new == .completed }
@@ -34,31 +34,33 @@ struct JobDetailView: View {
         let status = job.displayStatus(at: now)
 
         return List {
+            // Who
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    StatusPill(status: status)
                     if let name = job.displayName {
-                        Text(name).font(.title2.bold())
+                        Text(name)
+                            .font(.title2.bold())
                     } else {
                         Text("Unknown customer")
                             .font(.title2)
                             .foregroundStyle(.secondary)
                     }
+                    StatusPill(status: status)
                 }
-                .padding(.vertical, 4)
+                .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
+                .listRowBackground(Color.clear)
+                .accessibilityElement(children: .combine)
             }
 
-            Section("Schedule") {
+            // When
+            Section {
                 LabeledContent {
                     Text(job.timeText)
                         .font(.body.weight(.semibold))
                         .monospacedDigit()
                         .foregroundStyle(status == .overdue ? JobDisplayStatus.overdue.textColor : .primary)
                 } label: {
-                    Label(
-                        job.scheduledAt.formatted(.dateTime.weekday(.wide).day().month(.wide)),
-                        systemImage: "clock"
-                    )
+                    Label(dayText(for: job, now: now), systemImage: "clock")
                 }
 
                 if status == .overdue {
@@ -67,10 +69,27 @@ struct JobDetailView: View {
                 }
             }
 
-            Section("Address") {
+            // What to do
+            Section("Notes") {
+                if let notes = job.displayNotes {
+                    Text(notes)
+                        .textSelection(.enabled)
+                } else {
+                    Text("No notes")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Where
+            Section {
                 if let address = job.displayAddress {
                     Text(address)
                         .textSelection(.enabled)
+                        .contextMenu {
+                            Button("Copy Address", systemImage: "doc.on.doc") {
+                                UIPasteboard.general.string = address
+                            }
+                        }
                     Button {
                         if let url = directionsURL(to: address) { openURL(url) }
                     } label: {
@@ -80,39 +99,44 @@ struct JobDetailView: View {
                     Label("No address yet", systemImage: "mappin.slash")
                         .foregroundStyle(.secondary)
                 }
-            }
-
-            Section("Notes") {
-                if let notes = job.displayNotes {
-                    Text(notes).textSelection(.enabled)
-                } else {
-                    Text("No notes for this job.")
-                        .foregroundStyle(.secondary)
+            } header: {
+                Text("Address")
+            } footer: {
+                if job.displayAddress == nil {
+                    Text("Directions will be available once an address is added.")
                 }
-            }
-
-            Section {
-                LabeledContent("Job ID", value: job.id)
             }
         }
         .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
     }
 
     // MARK: Completion
 
-    @ViewBuilder
+    /// Completing is one tap with a success haptic, not a confirmation
+    /// dialog: it's the most frequent action, and Undo covers mistakes.
     private func completionBar(for job: Job) -> some View {
         Group {
             if job.status == .completed {
-                Label("Completed", systemImage: "checkmark.circle.fill")
-                    .font(.headline)
-                    .foregroundStyle(JobDisplayStatus.completed.textColor)
-                    .frame(maxWidth: .infinity, minHeight: 50)
-                    .background(JobDisplayStatus.completed.fillColor, in: Capsule())
-                    .accessibilityAddTraits(.isStaticText)
+                HStack(spacing: 12) {
+                    Label("Completed", systemImage: "checkmark.circle.fill")
+                        .font(.headline)
+                        .foregroundStyle(JobDisplayStatus.completed.textColor)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(JobDisplayStatus.completed.fillColor, in: Capsule())
+
+                    if store.canReopen(job.id) {
+                        Button("Undo") {
+                            withAnimation { store.reopen(job.id) }
+                        }
+                        .font(.headline)
+                        .frame(minWidth: 44, minHeight: 50)
+                        .accessibilityHint("Marks this job as not completed")
+                    }
+                }
             } else {
                 Button {
-                    isConfirmingCompletion = true
+                    withAnimation { store.markCompleted(job.id) }
                 } label: {
                     Label("Mark as Completed", systemImage: "checkmark.circle")
                         .font(.headline)
@@ -121,32 +145,28 @@ struct JobDetailView: View {
                 .buttonStyle(.borderedProminent)
                 .buttonBorderShape(.capsule)
                 .controlSize(.large)
-                // Completing can't be undone in this version, so confirm first.
-                .confirmationDialog(
-                    "Mark this job as completed?",
-                    isPresented: $isConfirmingCompletion,
-                    titleVisibility: .visible
-                ) {
-                    Button("Mark as Completed") {
-                        withAnimation { store.markCompleted(job.id) }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .padding(.bottom, 8)
+        .padding(.vertical, 8)
         .background(.bar)
     }
 
     // MARK: Helpers
 
+    /// "Today" for today's jobs; the full date otherwise.
+    private func dayText(for job: Job, now: Date) -> String {
+        Calendar.current.isDate(job.scheduledAt, inSameDayAs: now)
+            ? "Today"
+            : job.scheduledAt.formatted(.dateTime.weekday(.wide).day().month(.wide))
+    }
+
+    /// "45 min late", "2 hr 10 min late", "1 day 3 hr late".
     private func lateText(for job: Job, now: Date) -> String {
         let seconds = max(60, Int(now.timeIntervalSince(job.scheduledAt)))
         let late = Duration.seconds(seconds)
             .formatted(.units(allowed: [.days, .hours, .minutes], width: .abbreviated, maximumUnitCount: 2))
-        return "\(late) past scheduled time"
+        return "\(late) late"
     }
 
     private func directionsURL(to address: String) -> URL? {
