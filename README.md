@@ -89,7 +89,7 @@ The detail screen is designed for a technician standing at the customer's door. 
 
 - All sample jobs are on 25 Nov 2026. The subtitle shows the date of the jobs, not today's date. On any later day, every pending job shows as Overdue, which is the correct result of the rule.
 - Times are shown in 24-hour `HH:mm` format to match the design.
-- Undo is session-scoped to the JSON's original status; completing is saved immediately.
+- Undo restores the status from the JSON, even after a restart. Completing a job is saved immediately.
 
 ## Tests
 
