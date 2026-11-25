@@ -1,0 +1,124 @@
+import XCTest
+@testable import TodaysJobs
+
+@MainActor
+final class JobStoreTests: XCTestCase {
+
+    private func makeStore(
+        json: String = Fixtures.sampleJSON,
+        completed: Set<Job.ID> = []
+    ) -> (JobStore, InMemoryCompletionStore) {
+        let persistence = InMemoryCompletionStore(ids: completed)
+        let store = JobStore(
+            loader: { try JobLoader.decode(Data(json.utf8)) },
+            completionStore: persistence
+        )
+        store.load()
+        return (store, persistence)
+    }
+
+    // MARK: Loading
+
+    func testLoadSucceeds() {
+        let (store, _) = makeStore()
+        XCTAssertEqual(store.loadState, .loaded)
+        XCTAssertEqual(store.jobs.count, 5)
+    }
+
+    func testJobsAreSortedByScheduledTime() {
+        let reversed = Fixtures.jobsArray([
+            Fixtures.jobObject(id: "late", scheduledAt: "2026-11-25 17:00"),
+            Fixtures.jobObject(id: "early", scheduledAt: "2026-11-25 08:00"),
+        ])
+        let (store, _) = makeStore(json: reversed)
+        XCTAssertEqual(store.jobs.map(\.id), ["early", "late"])
+    }
+
+    func testLoadFailureSetsErrorState() {
+        let store = JobStore(
+            loader: { throw JobLoaderError.fileNotFound("jobs") },
+            completionStore: InMemoryCompletionStore()
+        )
+        store.load()
+        XCTAssertEqual(store.jobs, [])
+        guard case .failed(let message) = store.loadState else {
+            return XCTFail("Expected failed state, got \(store.loadState)")
+        }
+        XCTAssertFalse(message.isEmpty)
+    }
+
+    // MARK: Mark completed
+
+    func testMarkCompletedUpdatesJobAndCount() {
+        let (store, _) = makeStore()
+        XCTAssertEqual(store.pendingCount, 3)
+
+        store.markCompleted("J-101")
+
+        XCTAssertEqual(store.job(id: "J-101")?.status, .completed)
+        XCTAssertEqual(store.pendingCount, 2)
+        XCTAssertFalse(store.jobs(filter: .pending).contains { $0.id == "J-101" })
+    }
+
+    func testMarkCompletedPersists() {
+        let (store, persistence) = makeStore()
+        store.markCompleted("J-103")
+        XCTAssertEqual(persistence.ids, ["J-103"])
+    }
+
+    func testCompletionSurvivesRestart() {
+        let (_, persistence) = makeStore(completed: ["J-105"])
+        // A new store with the same persistence = an app restart.
+        let restarted = JobStore(
+            loader: { try JobLoader.decode(Data(Fixtures.sampleJSON.utf8)) },
+            completionStore: persistence
+        )
+        restarted.load()
+        XCTAssertEqual(restarted.job(id: "J-105")?.status, .completed)
+    }
+
+    func testMarkCompletedIgnoresUnknownID() {
+        let (store, persistence) = makeStore()
+        store.markCompleted("J-999")
+        XCTAssertEqual(store.pendingCount, 3)
+        XCTAssertTrue(persistence.ids.isEmpty)
+    }
+
+    // MARK: Filter and search
+
+    func testPendingFilterShowsOnlyPendingJobs() {
+        let (store, _) = makeStore()
+        XCTAssertEqual(store.jobs(filter: .pending).map(\.id), ["J-101", "J-103", "J-105"])
+        XCTAssertEqual(store.jobs(filter: .all).count, 5)
+    }
+
+    func testSearchMatchesNameAndAddressCaseInsensitively() {
+        let (store, _) = makeStore()
+        XCTAssertEqual(store.jobs(filter: .all, search: "priya").map(\.id), ["J-102"])
+        XCTAssertEqual(store.jobs(filter: .all, search: "ADYAR").map(\.id), ["J-103"])
+        XCTAssertEqual(store.jobs(filter: .all, search: "  ").count, 5)
+        XCTAssertTrue(store.jobs(filter: .all, search: "zzz").isEmpty)
+    }
+
+    // MARK: Overdue
+
+    func testOverdueRule() throws {
+        let (store, _) = makeStore()
+        let ravi = try XCTUnwrap(store.job(id: "J-101"))      // pending 09:30
+        let priya = try XCTUnwrap(store.job(id: "J-102"))     // in progress 11:00
+        let karthik = try XCTUnwrap(store.job(id: "J-104"))   // completed 15:45
+        let later = ravi.scheduledAt.addingTimeInterval(24 * 60 * 60)
+
+        XCTAssertEqual(ravi.displayStatus(at: ravi.scheduledAt.addingTimeInterval(-60)), .pending)
+        XCTAssertEqual(ravi.displayStatus(at: ravi.scheduledAt.addingTimeInterval(60)), .overdue)
+        XCTAssertEqual(priya.displayStatus(at: later), .inProgress)
+        XCTAssertEqual(karthik.displayStatus(at: later), .completed)
+    }
+
+    func testCompletingOverdueJobClearsOverdue() throws {
+        let (store, _) = makeStore()
+        let later = try XCTUnwrap(store.job(id: "J-101")).scheduledAt.addingTimeInterval(3600)
+        store.markCompleted("J-101")
+        XCTAssertEqual(store.job(id: "J-101")?.displayStatus(at: later), .completed)
+    }
+}
