@@ -11,13 +11,6 @@ A SwiftUI app that shows a field technician the jobs assigned to them today. The
 
 ##
 
-
-## Quick start
-
-1. Open `TodaysJobs.xcodeproj` in Xcode 16 or later.
-2. Choose any iPhone simulator running iOS 17 or later.
-3. Press **⌘R** to run, or **⌘U** to run the tests.
-
 There are no third-party dependencies and no setup steps.
 
 ## Features
