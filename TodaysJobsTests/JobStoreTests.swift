@@ -6,9 +6,9 @@ final class JobStoreTests: XCTestCase {
 
     private func makeStore(
         json: String = Fixtures.sampleJSON,
-        completed: Set<Job.ID> = []
+        completed: Set<String> = []
     ) -> (JobStore, InMemoryCompletionStore) {
-        let persistence = InMemoryCompletionStore(ids: completed)
+        let persistence = InMemoryCompletionStore(keys: completed)
         let store = JobStore(
             loader: { try JobLoader.decode(Data(json.utf8)) },
             completionStore: persistence
@@ -63,11 +63,11 @@ final class JobStoreTests: XCTestCase {
     func testMarkCompletedPersists() {
         let (store, persistence) = makeStore()
         store.markCompleted("J-103")
-        XCTAssertEqual(persistence.ids, ["J-103"])
+        XCTAssertEqual(persistence.keys, ["J-103@2026-11-25 13:15"])
     }
 
     func testCompletionSurvivesRestart() {
-        let (_, persistence) = makeStore(completed: ["J-105"])
+        let (_, persistence) = makeStore(completed: ["J-105@2026-11-25 17:30"])
         // A new store with the same persistence = an app restart.
         let restarted = JobStore(
             loader: { try JobLoader.decode(Data(Fixtures.sampleJSON.utf8)) },
@@ -77,11 +77,50 @@ final class JobStoreTests: XCTestCase {
         XCTAssertEqual(restarted.job(id: "J-105")?.status, .completed)
     }
 
-    func testMarkCompletedIgnoresUnknownID() {
-        let (store, persistence) = makeStore()
-        store.markCompleted("J-999")
-        XCTAssertEqual(store.pendingCount, 3)
-        XCTAssertTrue(persistence.ids.isEmpty)
+    func testCompletionDoesNotCarryOverToSameIDOnAnotherDay() {
+        let (today, persistence) = makeStore()
+        today.markCompleted("J-101")
+
+        // Tomorrow's list reuses the ID J-101 for a different job.
+        let tomorrowJSON = Fixtures.jobsArray([
+            Fixtures.jobObject(id: "J-101", scheduledAt: "2026-11-26 09:30"),
+        ])
+        let tomorrow = JobStore(
+            loader: { try JobLoader.decode(Data(tomorrowJSON.utf8)) },
+            completionStore: persistence
+        )
+        tomorrow.load()
+
+        XCTAssertEqual(tomorrow.job(id: "J-101")?.status, .pending)
+    }
+
+    func testUndoWorksAfterRestart() {
+        let (_, persistence) = makeStore(completed: ["J-101@2026-11-25 09:30"])
+        let restarted = JobStore(
+            loader: { try JobLoader.decode(Data(Fixtures.sampleJSON.utf8)) },
+            completionStore: persistence
+        )
+        restarted.load()
+
+        XCTAssertTrue(restarted.canReopen("J-101"))
+        restarted.reopen("J-101")
+        XCTAssertEqual(restarted.job(id: "J-101")?.status, .pending)
+        XCTAssertTrue(persistence.keys.isEmpty)
+    }
+
+    func testCompletionKeyMatchesJSONFormat() {
+        let (store, _) = makeStore()
+        XCTAssertEqual(store.job(id: "J-101")?.completionKey, "J-101@2026-11-25 09:30")
+    }
+
+    func testDuplicateIDsKeepFirstJob() {
+        let json = Fixtures.jobsArray([
+            Fixtures.jobObject(id: "dup", scheduledAt: "2026-11-25 08:00", status: "pending"),
+            Fixtures.jobObject(id: "dup", scheduledAt: "2026-11-25 09:00", status: "completed"),
+        ])
+        let (store, _) = makeStore(json: json)
+        XCTAssertEqual(store.jobs.count, 1)
+        XCTAssertEqual(store.job(id: "dup")?.status, .pending)
     }
 
     // MARK: Undo
@@ -94,7 +133,7 @@ final class JobStoreTests: XCTestCase {
         store.reopen("J-102")
 
         XCTAssertEqual(store.job(id: "J-102")?.status, .inProgress)
-        XCTAssertTrue(persistence.ids.isEmpty)
+        XCTAssertTrue(persistence.keys.isEmpty)
     }
 
     func testCannotReopenJobCompletedInJSON() {

@@ -2,39 +2,40 @@ import Foundation
 
 /// Remembers which jobs the technician completed, so it survives an app restart.
 ///
-/// Only the IDs are stored. The JSON stays the source of truth for everything
-/// else, and completing a job is the only change the app makes.
+/// Stores `Job.completionKey` values (ID + scheduled time), not bare IDs, so a
+/// completion never carries over to tomorrow's job that reuses the same ID.
+/// The JSON stays the source of truth for everything else.
 protocol CompletionPersisting {
-    func loadCompletedIDs() -> Set<Job.ID>
-    func saveCompletedIDs(_ ids: Set<Job.ID>)
+    func loadCompletedKeys() -> Set<String>
+    func saveCompletedKeys(_ keys: Set<String>)
 }
 
 struct UserDefaultsCompletionStore: CompletionPersisting {
     private let defaults: UserDefaults
     private let key: String
 
-    init(defaults: UserDefaults = .standard, key: String = "completedJobIDs") {
+    init(defaults: UserDefaults = .standard, key: String = "completedJobKeys") {
         self.defaults = defaults
         self.key = key
     }
 
-    func loadCompletedIDs() -> Set<Job.ID> {
+    func loadCompletedKeys() -> Set<String> {
         Set(defaults.stringArray(forKey: key) ?? [])
     }
 
-    func saveCompletedIDs(_ ids: Set<Job.ID>) {
-        defaults.set(ids.sorted(), forKey: key)
+    func saveCompletedKeys(_ keys: Set<String>) {
+        defaults.set(keys.sorted(), forKey: key)
     }
 }
 
 /// For previews and tests.
 final class InMemoryCompletionStore: CompletionPersisting {
-    private(set) var ids: Set<Job.ID>
+    private(set) var keys: Set<String>
 
-    init(ids: Set<Job.ID> = []) {
-        self.ids = ids
+    init(keys: Set<String> = []) {
+        self.keys = keys
     }
 
-    func loadCompletedIDs() -> Set<Job.ID> { ids }
-    func saveCompletedIDs(_ ids: Set<Job.ID>) { self.ids = ids }
+    func loadCompletedKeys() -> Set<String> { keys }
+    func saveCompletedKeys(_ keys: Set<String>) { self.keys = keys }
 }

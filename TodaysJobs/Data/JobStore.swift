@@ -47,22 +47,20 @@ final class JobStore {
 
     func load() {
         do {
-            let completed = completionStore.loadCompletedIDs()
-            let decoded = try loader()
-            originalStatuses = Dictionary(
-                decoded.map { ($0.id, $0.status) },
-                uniquingKeysWith: { first, _ in first }
-            )
+            let completed = completionStore.loadCompletedKeys()
+            let decoded = Self.removingDuplicateIDs(try loader())
+            originalStatuses = Dictionary(uniqueKeysWithValues: decoded.map { ($0.id, $0.status) })
             jobs = decoded
                 .map { job in
                     var job = job
-                    if completed.contains(job.id) { job.status = .completed }
+                    if completed.contains(job.completionKey) { job.status = .completed }
                     return job
                 }
                 .sorted { ($0.scheduledAt, $0.id) < ($1.scheduledAt, $1.id) }
             loadState = .loaded
         } catch {
             jobs = []
+            originalStatuses = [:]
             loadState = .failed(Self.message(for: error))
         }
     }
@@ -97,9 +95,9 @@ final class JobStore {
               jobs[index].status != .completed else { return }
         jobs[index].status = .completed
 
-        var completed = completionStore.loadCompletedIDs()
-        completed.insert(id)
-        completionStore.saveCompletedIDs(completed)
+        var completed = completionStore.loadCompletedKeys()
+        completed.insert(jobs[index].completionKey)
+        completionStore.saveCompletedKeys(completed)
     }
 
     /// Whether a completion can be undone: only jobs the technician completed
@@ -117,12 +115,19 @@ final class JobStore {
               let original = originalStatuses[id] else { return }
         jobs[index].status = original
 
-        var completed = completionStore.loadCompletedIDs()
-        completed.remove(id)
-        completionStore.saveCompletedIDs(completed)
+        var completed = completionStore.loadCompletedKeys()
+        completed.remove(jobs[index].completionKey)
+        completionStore.saveCompletedKeys(completed)
     }
 
     // MARK: Helpers
+
+    /// Keeps the first job for each ID. Duplicates would break `ForEach`
+    /// identity and make `job(id:)` ambiguous.
+    private static func removingDuplicateIDs(_ jobs: [Job]) -> [Job] {
+        var seen = Set<Job.ID>()
+        return jobs.filter { seen.insert($0.id).inserted }
+    }
 
     private static func message(for error: Error) -> String {
         if let error = error as? LocalizedError, let description = error.errorDescription {

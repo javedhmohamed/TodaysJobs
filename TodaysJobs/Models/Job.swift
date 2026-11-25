@@ -60,10 +60,24 @@ extension Job {
             .contains { $0.localizedStandardContains(query) }
     }
 
+    /// Identifies this job on this day for saved completions, e.g.
+    /// `"J-101@2026-11-25 09:30"`. Same format as the JSON, so it round-trips.
+    var completionKey: String {
+        "\(id)@\(scheduledAt.formatted(Job.keyStyle))"
+    }
+
+    // `.autoupdatingCurrent` everywhere, matching the decoder, so display and
+    // keys follow the device if its time zone changes while the app is open.
     private static let timeStyle = Date.VerbatimFormatStyle(
         format: "\(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)",
-        timeZone: .current,
-        calendar: .current
+        timeZone: .autoupdatingCurrent,
+        calendar: Calendar(identifier: .gregorian)
+    )
+
+    private static let keyStyle = Date.VerbatimFormatStyle(
+        format: "\(year: .defaultDigits)-\(month: .twoDigits)-\(day: .twoDigits) \(hour: .twoDigits(clock: .twentyFourHour, hourCycle: .zeroBased)):\(minute: .twoDigits)",
+        timeZone: .autoupdatingCurrent,
+        calendar: Calendar(identifier: .gregorian)
     )
 }
 

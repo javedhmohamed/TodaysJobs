@@ -48,7 +48,7 @@ TodaysJobs/
 ├── Data/
 │   ├── JobLoader.swift        Bundle loading and the JSON decoder setup
 │   ├── JobStore.swift         @Observable source of truth: load, filter, complete
-│   └── CompletionStore.swift  Persists completed job IDs
+│   └── CompletionStore.swift  Persists completed jobs (ID + scheduled time)
 ├── Views/
 │   ├── JobListView.swift      List, filter, search, empty and error states
 │   ├── JobRow.swift           One row, every designed state
@@ -70,7 +70,8 @@ TodaysJobsTests/               XCTest unit tests and the JSON fixture
 **Architecture**
 - There is one `@Observable` `JobStore` injected with `.environment`. The detail screen calls `markCompleted`, and the list updates because both read the same store.
 - The loader and the persistence are injected, so tests and previews run without the bundle or `UserDefaults`.
-- Only the IDs of completed jobs are saved. The JSON stays the source of truth for everything else.
+- Each completed job is saved as its ID plus its scheduled time (`J-101@2026-11-25 09:30`), not the ID alone, so a completion never carries over to a job with the same ID on a different day. The JSON stays the source of truth for everything else.
+- Duplicate IDs in the JSON are removed when loading, keeping the first occurrence.
 
 **Detail screen**
 
@@ -103,7 +104,7 @@ The detail screen is designed for a technician standing at the customer's door. 
 
 Run them with **⌘U**. They cover:
 - **Decoding:** all 5 jobs, snake_case keys, local date parsing, every status, the null name, the missing notes key, empty notes, the empty address, an unknown status, and a malformed date (should throw).
-- **Store:** sorting, the load-failure state, mark completed (status, count, filter), undo (restores the original status and clears the saved completion; not allowed for jobs completed in the JSON), persistence across a simulated restart, an unknown ID, the pending filter, search, and the overdue rule.
+- **Store:** sorting, the load-failure state, mark completed (status, count, filter), undo (restores the original status and clears the saved completion; not allowed for jobs completed in the JSON), persistence across a simulated restart, undo after a restart, no carry-over to the same ID on another day, duplicate IDs, the completion key format, an unknown ID, the pending filter, search, and the overdue rule.
 
 ## tools used
 

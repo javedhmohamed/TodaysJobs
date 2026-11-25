@@ -44,21 +44,20 @@ extension JobDisplayStatus {
 
 extension Color {
     /// A colour that adapts to light and dark mode.
+    ///
+    /// The maths is inline on purpose: UIKit may call the provider off the
+    /// main actor, so it must not call app code that Xcode 26's default
+    /// MainActor isolation would tie to the main actor.
     init(light: UInt32, dark: UInt32) {
         self.init(uiColor: UIColor { traits in
-            UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(
+                red: CGFloat((hex >> 16) & 0xFF) / 255,
+                green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255,
+                alpha: 1
+            )
         })
-    }
-}
-
-private extension UIColor {
-    convenience init(hex: UInt32) {
-        self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
-        )
     }
 }
 

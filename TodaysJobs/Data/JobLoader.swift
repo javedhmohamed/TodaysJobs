@@ -36,7 +36,7 @@ enum JobLoader {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX") // fixed format, ignore user settings
         formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.timeZone = .current                          // the times are local job-site times
+        formatter.timeZone = .autoupdatingCurrent              // the times are local job-site times
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
 
         let decoder = JSONDecoder()
