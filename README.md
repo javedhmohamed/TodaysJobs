@@ -2,7 +2,15 @@
 
 A SwiftUI app that shows a field technician the jobs assigned to them today. They can open a job to see its details and mark it Completed when the work is done.
 
-Built for the Zuper iOS Intern Assignment (Round 1).
+
+  
+🚩🚩🚩 ##   
+
+## imortant notice the given system is 26.4.1 and the requirements is ios 17 or later the mac need to be updated to the latest version to download the latest verion of xcode and then the xcode iphone simulation tool inthe latest vesion therefore i made it and tested it in my mac and will attach screenshots as proof (the updation of the system and the too will take more than the given time)         
+
+
+##
+
 
 ## Quick start
 
